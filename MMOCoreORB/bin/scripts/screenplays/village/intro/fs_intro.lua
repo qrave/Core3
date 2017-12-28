@@ -12,10 +12,8 @@ FsIntro = ScreenPlay:new {
 	VILLAGE = 8,
 
 	stepDelay = {
-		--[1] = { 86400, 172800 }, -- Old man visit, 1-2 days
-		--[3] = { 3600, 86400 } -- Sith shadow attack, 1 hour to 1 day
-		[1] = { 300, 600 }, -- Old man visit, 5-10 mins for testing
-		[3] = { 300, 600 } -- Sith shadow attack, 5-10 mins for testing
+		[1] = { 43200, 129600 }, -- Old man visit, 12-36 hours
+		[3] = { 3600, 43200 } -- Sith shadow attack, 1 hour to 12 hours
 	}
 }
 
@@ -64,15 +62,9 @@ function FsIntro:startStepDelay(pPlayer, step)
 
 		if oldManVisits ~= nil then
 			if (oldManVisits == 2) then
-				stepDelay = stepDelay + (2 * 24 * 60 * 60)
-			elseif (oldManVisits == 3) then
-				stepDelay = stepDelay + (7 * 24 * 60 * 60)
-			elseif (oldManVisits == 4) then
-				stepDelay = stepDelay + (14 * 24 * 60 * 60)
-			elseif (oldManVisits == 5) then
-				stepDelay = stepDelay + (30 * 24 * 60 * 60)
-			elseif (oldManVisits >= 6) then
-				stepDelay = stepDelay + (60 * 24 * 60 * 60)
+				stepDelay = stepDelay + (1 * 24 * 60 * 60)
+			elseif (oldManVisits >= 3) then
+				stepDelay = stepDelay + (oldManVisits * 24 * 60 * 60)
 			end
 		end
 	end
@@ -334,4 +326,49 @@ function FsIntro:startSithAttack(pPlayer)
 		createEvent(getRandomNumber(300, 900) * 1000, "FsIntro", "startSithAttack", pPlayer, "")
 		return
 	end
+end
+
+function FsIntro:completeVillageIntroFrog(pPlayer)
+	if (pPlayer == nil) then
+		return
+	end
+
+	local pInventory = SceneObject(pPlayer):getSlottedObject("inventory")
+
+	if (pInventory == nil) then
+		return
+	end
+
+	local pGhost = CreatureObject(pPlayer):getPlayerObject()
+
+	if (pGhost == nil) then
+		return
+	end
+
+	VillageJediManagerCommon.setJediProgressionScreenPlayState(pPlayer, VILLAGE_JEDI_PROGRESSION_GLOWING)
+
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.OLD_MAN_INITIAL)
+
+	giveItem(pInventory, "object/tangible/loot/quest/force_sensitive/force_crystal.iff", -1)
+
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.OLD_MAN_FORCE_CRYSTAL)
+
+	VillageJediManagerCommon.setJediProgressionScreenPlayState(pPlayer, VILLAGE_JEDI_PROGRESSION_HAS_CRYSTAL)
+
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.TWO_MILITARY)
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.LOOT_DATAPAD_1)
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.GOT_DATAPAD)
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.FS_THEATER_CAMP)
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.GOT_DATAPAD_2)
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.LOOT_DATAPAD_2)
+
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.FS_VILLAGE_ELDER)
+
+	VillageJediManagerCommon.setJediProgressionScreenPlayState(pPlayer, VILLAGE_JEDI_PROGRESSION_HAS_VILLAGE_ACCESS)
+
+	if (not PlayerObject(pGhost):isJedi()) then
+		PlayerObject(pGhost):setJediState(1)
+	end
+
+	awardSkill(pPlayer, "force_title_jedi_novice")
 end

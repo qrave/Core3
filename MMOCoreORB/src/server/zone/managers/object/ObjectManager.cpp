@@ -26,6 +26,8 @@ using namespace engine::db;
 
 // http://tinyurl.com/2g9mqh
 
+#define SLOW_QUEUES_COUNT 4
+
 uint32 ObjectManager::serverObjectCrcHashCode = STRING_HASHCODE("SceneObject.serverObjectCRC");
 uint32 ObjectManager::_classNameHashCode = STRING_HASHCODE("_className");
 
@@ -57,10 +59,13 @@ ObjectManager::ObjectManager() : DOBObjectManager() {
 	databaseManager->loadObjectDatabase("questdata", true);
 	databaseManager->loadObjectDatabase("surveys", true);
 	databaseManager->loadObjectDatabase("accounts", true);
+    databaseManager->loadObjectDatabase("pendingmail", true);
+	databaseManager->loadObjectDatabase("credits", true);
 	databaseManager->loadObjectDatabase("navareas", true, 0xFFFF, false);
 
 	ObjectDatabaseManager::instance()->commitLocalTransaction();
 
+	Core::getTaskManager()->initializeCustomQueue("slowQueue", SLOW_QUEUES_COUNT, true);
 
 	loadLastUsedObjectID();
 
@@ -165,7 +170,6 @@ void ObjectManager::registerObjectTypes() {
 
 	objectFactory.registerObject<BuildingObject>(SceneObjectType::BUILDING);
 	objectFactory.registerObject<BuildingObject>(SceneObjectType::CAPITOLBUILDING);
-	objectFactory.registerObject<TutorialBuildingObject>(SceneObjectType::TUTORIALBUILDING);
 	objectFactory.registerObject<HospitalBuildingObject>(SceneObjectType::HOSPITALBUILDING);
 	objectFactory.registerObject<TravelBuildingObject>(SceneObjectType::TRAVELBUILDING);
 	objectFactory.registerObject<RecreationBuildingObject>(SceneObjectType::RECREATIONBUILDING);
@@ -179,6 +183,7 @@ void ObjectManager::registerObjectTypes() {
 	objectFactory.registerObject<BuildingObject>(SceneObjectType::GARAGEBUILDING);
 	objectFactory.registerObject<BuildingObject>(SceneObjectType::SALONBUILDING);
 	objectFactory.registerObject<PoiBuilding>(SceneObjectType::POIBUILDING);
+	objectFactory.registerObject<TutorialBuildingObject>(SceneObjectType::TUTORIALBUILDING);
 
 
 	objectFactory.registerObject<InstallationObject>(SceneObjectType::INSTALLATION);
@@ -862,12 +867,12 @@ SceneObject* ObjectManager::createObject(uint32 objectCRC, int persistenceLevel,
 		return NULL;
 	}
 
+	object->setPersistent(persistenceLevel);
+
 	if (initializeTransientMembers)
 		object->initializeTransientMembers();
 
 	if (persistenceLevel > 0) {
-		object->setPersistent(persistenceLevel);
-
 		updatePersistentObject(object);
 
 		object->queueUpdateToDatabaseTask();
@@ -896,10 +901,10 @@ ManagedObject* ObjectManager::createObject(const String& className, int persiste
 
 	servant->_serializationHelperMethod();
 
+	object->setPersistent(persistenceLevel);
+
 	if (initializeTransientMembers)
 		object->initializeTransientMembers();
-
-	object->setPersistent(persistenceLevel);
 
 	object->deploy();
 

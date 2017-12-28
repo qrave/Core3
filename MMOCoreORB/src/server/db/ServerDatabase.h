@@ -5,46 +5,24 @@
 #ifndef SERVERDATABASE_H_
 #define SERVERDATABASE_H_
 
-#include "../conf/ConfigManager.h"
+#include "engine/engine.h"
+
+namespace conf {
+	class ConfigManager;
+}
 
 class ServerDatabase {
 	static Vector<Database*>* databases;
 	static AtomicInteger currentDB;
 
 public:
-	ServerDatabase(ConfigManager* configManager) {
-		String& dbHost = configManager->getDBHost();
-        String& dbUser = configManager->getDBUser();
-        String& dbPass = configManager->getDBPass();
-        String& dbName = configManager->getDBName();
-        uint16& dbPort = configManager->getDBPort();
-
-        databases = new Vector<Database*>();
-
-        for (int i = 0; i < DEFAULT_SERVERDATABASE_INSTANCES; ++i) {
-        	Database* db = new engine::db::mysql::MySqlDatabase(String("ServerDatabase" + String::valueOf(i)), dbHost);
-        	db->connect(dbName, dbUser, dbPass, dbPort);
-
-        	databases->add(db);
-        }
-
-	}
+	ServerDatabase(conf::ConfigManager* configManager);
+	~ServerDatabase();
 
 	const static int DEFAULT_SERVERDATABASE_INSTANCES = 8;
 
-	~ServerDatabase() {
-		while (!databases->isEmpty()) {
-			Database* db = databases->remove(0);
-
-			delete db;
-		}
-
-		delete databases;
-		databases = NULL;
-	}
-
 	inline static Database* instance() {
-		if (databases == NULL)
+		if (databases == nullptr)
 			throw DatabaseException("No Server Database initiated");
 
 		int i = currentDB.get() % databases->size();

@@ -15,6 +15,7 @@ import server.zone.objects.tangible.TangibleObject;
 include server.zone.managers.crafting.schematicmap.SchematicMap;
 include server.zone.objects.manufactureschematic.craftingvalues.CraftingValues;
 include system.util.HashTable;
+include system.util.VectorMap;
 include system.lang.ref.Reference;
 
 @dirty
@@ -41,9 +42,6 @@ class CraftingManager extends ZoneManager {
 	public static final short OK = 6;
 	public static final short BARELYSUCCESSFUL = 7;
 	public static final short CRITICALFAILURE = 8;
-
-	@dereferenced
-	private transient SortedVector<string> bioMods;
 	
 	@dereferenced
 	private transient HashTable<int, Reference<SharedLabratory> > labs;
@@ -82,10 +80,6 @@ class CraftingManager extends ZoneManager {
 	public native int calculateExperimentationSuccess(CreatureObject player, DraftSchematic draftSchematic, float effectiveness);
 	
 	public native string generateSerial();
-
-	private native boolean loadBioSkillMods();
-
-	public native string checkBioSkillMods(final string property);
 	
 	private native void configureLabratories();
 	

@@ -33,18 +33,6 @@ function SithShadowEncounter:isTheFirstSithShadowOfThePlayer(pSithShadow, pPlaye
 	return spawnedSithShadows ~= nil and spawnedSithShadows[1] ~= nil and CreatureObject(spawnedSithShadows[1]):getObjectID() == CreatureObject(pSithShadow):getObjectID()
 end
 
--- Create the waypoint data pad as loot on the sith shadow.
--- @param pSithShadow pointer to the creature object of the sith shadow.
-function SithShadowEncounter:addWaypointDatapadAsLoot(pSithShadow)
-	local pInventory = SceneObject(pSithShadow):getSlottedObject("inventory")
-
-	if (pInventory == nil) then
-		return
-	end
-
-	createLoot(pInventory, "sith_shadow_encounter_datapad", 0, true)
-end
-
 -- Event handler for the LOOTCREATURE event on one of the sith shadows.
 -- @param pLootedCreature pointer to the sith shadow creature that is being looted.
 -- @param pLooter pointer to the creature object of the looter.
@@ -58,7 +46,6 @@ function SithShadowEncounter:onLoot(pLootedCreature, pLooter, nothing)
 	Logger:log("Looting the sith shadow.", LT_INFO)
 	if QuestManager.hasActiveQuest(pLooter, QuestManager.quests.TWO_MILITARY) then
 		if self:isTheFirstSithShadowOfThePlayer(pLootedCreature, pLooter) then
-			self:addWaypointDatapadAsLoot(pLootedCreature)
 			QuestManager.completeQuest(pLooter, QuestManager.quests.TWO_MILITARY)
 			QuestManager.completeQuest(pLooter, QuestManager.quests.GOT_DATAPAD)
 			return 1
@@ -101,7 +88,17 @@ function SithShadowEncounter:onEncounterSpawned(pPlayer, spawnedObjects)
 		return
 	end
 
-	Logger:log("Register Sith Shadow Encounter observers.", LT_INFO)
+	local playerID = SceneObject(pPlayer):getObjectID()
+
+	local pInventory = SceneObject(spawnedObjects[1]):getSlottedObject("inventory")
+
+	if (pInventory == nil) then
+		return
+	end
+
+	SceneObject(pInventory):setContainerOwnerID(playerID)
+	createLoot(pInventory, "sith_shadow_encounter_datapad", 0, true)
+
 	createObserver(LOOTCREATURE, self.taskName, "onLoot", spawnedObjects[1])
 	createObserver(OBJECTDESTRUCTION, self.taskName, "onPlayerKilled", pPlayer)
 	FsIntro:setCurrentStep(pPlayer, 4)

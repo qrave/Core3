@@ -23,7 +23,9 @@
 #include "server/zone/managers/director/DirectorManager.h"
 #include "server/zone/managers/collision/NavMeshManager.h"
 
-#include "engine/util/u3d/QuadTree.h"
+#include "server/zone/QuadTree.h"
+
+#include "engine/core/MetricsManager.h"
 
 ManagedReference<ZoneServer*> ServerCore::zoneServerRef = NULL;
 SortedVector<String> ServerCore::arguments;
@@ -48,6 +50,7 @@ ServerCore::ServerCore(bool truncateDatabases, SortedVector<String>& args) :
 	instance = this;
 
 	configManager = ConfigManager::instance();
+	metricsManager = MetricsManager::instance();
 
 	features = NULL;
 
@@ -80,6 +83,9 @@ void ServerCore::initialize() {
 
 	processConfig();
 
+	Logger::setGlobalFileLogger(configManager->getLogFile());
+	Logger::setGlobalFileLogLevel(static_cast<Logger::LogLevel>(configManager->getLogFileLevel()));
+
 	try {
 		ObjectManager* objectManager = ObjectManager::instance();
 
@@ -87,12 +93,24 @@ void ServerCore::initialize() {
 
 		mantisDatabase = new MantisDatabase(configManager);
 
-		String& orbaddr = configManager->getORBNamingDirectoryAddress();
+		const String& orbaddr = configManager->getORBNamingDirectoryAddress();
 		orb = DistributedObjectBroker::initialize(orbaddr,
 //				DistributedObjectBroker::NAMING_DIRECTORY_PORT);
 				configManager->getORBNamingDirectoryPort());
 
 		orb->setCustomObjectManager(objectManager);
+
+		StringBuffer metricsMsg;
+		metricsMsg << "METRICS: " << String::valueOf(configManager->shouldUseMetrics()) << " " << configManager->getMetricsHost() << " " << String::valueOf(configManager->getMetricsPort()) << endl;
+
+		info(metricsMsg, true);
+
+		if (configManager->shouldUseMetrics()) {
+			metricsManager->setGlobalPrefix(configManager->getMetricsPrefix());
+			metricsManager->initializeStatsDConnection(
+					configManager->getMetricsHost().toCharArray(),
+					configManager->getMetricsPort());
+		}
 
 		if (configManager->getMakeLogin()) {
 			loginServer = new LoginServer(configManager);
@@ -101,7 +119,7 @@ void ServerCore::initialize() {
 
 		if (configManager->getMakeZone()) {
 			ZoneServer* zoneServer = new ZoneServer(configManager);
-			zoneServer->deploy("ZoneServer");
+            zoneServer->deploy("ZoneServer");
 
 			zoneServerRef = zoneServer;
 		}
@@ -123,7 +141,8 @@ void ServerCore::initialize() {
 		NavMeshManager::instance()->initialize(configManager->getMaxNavMeshJobs(), zoneServer);
 
 		if (zoneServer != NULL) {
-			int zonePort = 44463;
+			int zonePort = configManager->getZoneServerPort();
+
 			int zoneAllowedConnections =
 					configManager->getZoneAllowedConnections();
 
@@ -138,13 +157,15 @@ void ServerCore::initialize() {
 			int galaxyID = configManager->getZoneGalaxyID();
 
 			try {
-				String query = "SELECT port FROM galaxy WHERE galaxy_id = "
-						+ String::valueOf(galaxyID);
-				Reference<ResultSet*> result =
-						database->instance()->executeQuery(query);
+				if (zonePort == 0) {
+					String query = "SELECT port FROM galaxy WHERE galaxy_id = "
+								   + String::valueOf(galaxyID);
+					Reference < ResultSet * > result =
+							database->instance()->executeQuery(query);
 
-				if (result != NULL && result->next()) {
-					zonePort = result->getInt(0);
+					if (result != NULL && result->next()) {
+						zonePort = result->getInt(0);
+					}
 				}
 
 				database->instance()->executeStatement(
@@ -152,8 +173,8 @@ void ServerCore::initialize() {
 
 				database->instance()->executeStatement(
 						"DELETE FROM characters_dirty WHERE galaxy_id = "
-								+ String::valueOf(galaxyID));
-			} catch (DatabaseException& e) {
+						+ String::valueOf(galaxyID));
+			} catch (DatabaseException &e) {
 				error(e.getMessage());
 
 				exit(1);
@@ -231,8 +252,16 @@ void ServerCore::shutdown() {
 
 	ObjectManager* objectManager = ObjectManager::instance();
 
+	while (objectManager->isObjectUpdateInProcess())
+		Thread::sleep(500);
+
 	objectManager->cancelDeleteCharactersTask();
 	objectManager->cancelUpdateModifiedObjectsTask();
+
+	if (loginServer != NULL) {
+		loginServer->stop();
+		loginServer = NULL;
+	}
 
 	ZoneServer* zoneServer = zoneServerRef.get();
 
@@ -241,14 +270,19 @@ void ServerCore::shutdown() {
 
 		Thread::sleep(2000);
 
+		info("Disconnecting all players", true);
+
 		PlayerManager* playerManager = zoneServer->getPlayerManager();
 
 		playerManager->disconnectAllPlayers();
-	}
 
-	if (loginServer != NULL) {
-		loginServer->stop();
-		loginServer = NULL;
+		int count = 0;
+		while (zoneServer->getConnectionCount() > 0 && count < 20) {
+			Thread::sleep(500);
+			count++;
+		}
+
+		info("All players disconnected", true);
 	}
 
 	if (pingServer != NULL) {
@@ -313,6 +347,7 @@ void ServerCore::shutdown() {
 	objectManager->finalizeInstance();
 
 	configManager = NULL;
+	metricsManager = NULL;
 
 	if (database != NULL) {
 		delete database;
@@ -434,7 +469,8 @@ void ServerCore::handleCommands() {
 				}
 
 				if (num != 0) {
-					PlayerManagerImplementation::MAX_CHAR_ONLINE_COUNT = num;
+					PlayerManager* pMan = zoneServer->getPlayerManager();
+					pMan->setOnlineCharactersPerAccount(num);
 
 					System::out << "changed max concurrent chars per account to: " << num << endl;
 				}
@@ -453,6 +489,19 @@ void ServerCore::handleCommands() {
 					System::out << "result: " << file << endl;
 				}
 
+			} else if (command == "loglevel") {
+				int level = 0;
+				try {
+					level = Integer::valueOf(arguments);
+				} catch (Exception& e) {
+					System::out << "invalid log level" << endl;
+				}
+
+				if (level >= Logger::NONE && level <= Logger::DEBUG) {
+					Logger::setGlobalFileLogLevel(static_cast<Logger::LogLevel>(level));
+
+					System::out << "log level changed to: " << level << endl;
+				}
 			} else if (command == "rev") {
 				System::out << ConfigManager::instance()->getRevision() << endl;
 			} else if (command == "broadcast") {
@@ -508,6 +557,49 @@ void ServerCore::handleCommands() {
 				DirectorManager::instance()->reloadScreenPlays();
 			} else if ( command == "clearstats" ) {
 				Core::getTaskManager()->clearWorkersTaskStats();
+#ifdef COLLECT_TASKSTATISTICS
+			} else if (command == "statsd") {
+				StringTokenizer argTokenizer(arguments);
+
+				argTokenizer.setDelimiter(" ");
+
+				String address;
+				int port = 0;
+
+				if (argTokenizer.hasMoreTokens())
+					argTokenizer.getStringToken(address);
+
+				if (argTokenizer.hasMoreTokens())
+					port = argTokenizer.getIntToken();
+
+				if (port) {
+					MetricsManager::instance()->initializeStatsDConnection(address.toCharArray(), port);
+
+					System::out << "metrics manager connection set to" << address << ":" << port << endl;
+				} else {
+					System::out << "invalid port or address" << endl;
+				}
+			} else if (command == "samplerate") {
+				try {
+					int rate = UnsignedInteger::valueOf(arguments);
+
+					Core::getTaskManager()->setStatsDTaskSampling(rate);
+
+					System::out << "statsd sampling rate changed to " << rate << endl;
+				} catch (Exception& e) {
+					System::out << "invalid statsd sampling rate" << endl;
+				}
+			} else if (command == "sampleratedb") {
+				try {
+					int rate = UnsignedInteger::valueOf(arguments);
+
+					Core::getTaskManager()->setStatsDBdbSamplingRate(rate);
+
+					System::out << "statsd berkeley db sampling rate changed to " << rate << endl;
+				} catch (Exception& e) {
+					System::out << "invalid statsd sampling rate" << endl;
+				}
+#endif
 			} else {
 				System::out << "unknown command (" << command << ")\n";
 			}

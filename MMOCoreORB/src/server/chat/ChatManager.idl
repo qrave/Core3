@@ -18,6 +18,7 @@ import server.zone.objects.player.PlayerObject;
 import server.zone.packets.chat.ChatInstantMessageToCharacter;
 import engine.log.Logger;
 import server.zone.objects.waypoint.WaypointObject;
+import server.chat.PendingMessageList;
 include server.chat.StringIdChatParameter;
 include server.chat.StringIdChatParameterVector;
 include server.chat.WaypointChatParameterVector;
@@ -349,7 +350,6 @@ class ChatManager extends ManagedService implements Logger {
 	@local
 	public native void handleChatInstantMessageToCharacter(ChatInstantMessageToCharacter message);
 
-	@local
 	public native void broadcastChatMessage(CreatureObject player, @dereferenced StringIdChatParameter message, unsigned long target = 0, unsigned int spatialChatType = 0, unsigned int moodType = 0, unsigned int chatFlags = 0, int languageID = 1);
 
 	public native void handleSpatialChatInternalMessage(CreatureObject player, final unicode args);
@@ -359,6 +359,7 @@ class ChatManager extends ManagedService implements Logger {
 	public native void handleAuctionChat(CreatureObject player, final unicode message);
 	public native void handleChatRoomMessage(CreatureObject sender, final unicode message, unsigned int roomID, unsigned int counter);
 	public native void handleSocialInternalMessage(CreatureObject sender, final unicode arguments);
+	@local
 	public native void broadcastMessage(BaseMessage message);
 	public native void broadcastChatMessage(CreatureObject player, final unicode message, unsigned long target = 0, unsigned int spatialChatType = 0, unsigned int moodType = 0, unsigned int chatFlags = 0, int languageID = 1);
 	public native void broadcastGalaxy(CreatureObject player, final string message);
@@ -405,8 +406,14 @@ class ChatManager extends ManagedService implements Logger {
 		return gameRooms.get(game);
 	}
 
+	@dirty
 	public int getPlayerCount() {
 		return playerMap.size();
+	}
+	
+	@dirty
+	public ZoneServer getZoneServer() {
+		return server;
 	}
 
 	@local
@@ -446,5 +453,9 @@ class ChatManager extends ManagedService implements Logger {
 	public string getSocialType(unsigned int id) {
 		return socialTypes.get(id);
 	}
+
+	// returns a list of pending persistent messages for the player
+	@reference
+	public native PendingMessageList getPendingMessages(unsigned long oid);
 }
 

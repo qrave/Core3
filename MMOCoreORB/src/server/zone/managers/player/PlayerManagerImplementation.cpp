@@ -100,8 +100,7 @@
 #include "server/zone/objects/creature/ai/DroidObject.h"
 #include "server/zone/objects/tangible/components/droid/DroidPlaybackModuleDataComponent.h"
 #include "server/zone/objects/player/badges/Badge.h"
-
-int PlayerManagerImplementation::MAX_CHAR_ONLINE_COUNT = 2;
+#include "server/zone/objects/building/TutorialBuildingObject.h"
 
 PlayerManagerImplementation::PlayerManagerImplementation(ZoneServer* zoneServer, ZoneProcessServer* impl) :
 										Logger("PlayerManager") {
@@ -150,6 +149,7 @@ void PlayerManagerImplementation::loadLuaConfig() {
 	lua->runFile("scripts/managers/player_manager.lua");
 
 	allowSameAccountPvpRatingCredit = lua->getGlobalInt("allowSameAccountPvpRatingCredit");
+	onlineCharactersPerAccount = lua->getGlobalInt("onlineCharactersPerAccount");
 	performanceBuff = lua->getGlobalInt("performanceBuff");
 	medicalBuff = lua->getGlobalInt("medicalBuff");
 	performanceDuration = lua->getGlobalInt("performanceDuration");
@@ -388,6 +388,9 @@ bool PlayerManagerImplementation::existsName(const String& name) {
 	return res;
 }
 
+bool PlayerManagerImplementation::existsPlayerCreatureOID(uint64 oid) {
+	return nameMap->containsOID(oid);
+}
 
 bool PlayerManagerImplementation::kickUser(const String& name, const String& admin, String& reason, bool doBan) {
 	ManagedReference<ChatManager*> chatManager = server->getChatManager();
@@ -562,14 +565,23 @@ bool PlayerManagerImplementation::checkPlayerName(ClientCreateCharacterCallback*
 void PlayerManagerImplementation::createTutorialBuilding(CreatureObject* player) {
 	Zone* zone = server->getZone("tutorial");
 
-//	const static String cell = "object/cell/cell.iff";
+	if (zone == NULL) {
+		error("Character creation failed, tutorial zone disabled.");
+		return;
+	}
 
-	Reference<BuildingObject*> tutorial = server->createObject(STRING_HASHCODE("object/building/general/newbie_hall.iff"), 1).castTo<BuildingObject*>();
+	Reference<TutorialBuildingObject*> tutorial = server->createObject(STRING_HASHCODE("object/building/general/newbie_hall.iff"), 1).castTo<TutorialBuildingObject*>();
+
+	if (tutorial == NULL) {
+		error("Tutorial building creation failed.");
+		return;
+	}
 
 	Locker locker(tutorial);
 
 	tutorial->createCellObjects();
 	tutorial->setPublicStructure(true);
+	tutorial->setTutorialOwnerID(player->getObjectID());
 
 	tutorial->initializePosition(System::random(5000), 0, System::random(5000));
 	zone->transferObject(tutorial, -1, true);
@@ -592,6 +604,12 @@ void PlayerManagerImplementation::createTutorialBuilding(CreatureObject* player)
 
 void PlayerManagerImplementation::createSkippedTutorialBuilding(CreatureObject* player) {
 	Zone* zone = server->getZone("tutorial");
+
+	if (zone == NULL) {
+		error("Character creation failed, tutorial zone disabled.");
+		return;
+	}
+
 
 	Reference<BuildingObject*> tutorial = server->createObject(STRING_HASHCODE("object/building/general/newbie_hall_skipped.iff"), 1).castTo<BuildingObject*>();
 
@@ -748,7 +766,7 @@ void PlayerManagerImplementation::killPlayer(TangibleObject* attacker, CreatureO
 	player->sendSystemMessage(stringId);
 
 	player->updateTimeOfDeath();
-	player->clearBuffs(true);
+	player->clearBuffs(true, false);
 
 	PlayerObject* ghost = player->getPlayerObject();
 
@@ -917,8 +935,12 @@ void PlayerManagerImplementation::sendActivateCloneRequest(CreatureObject* playe
 			cloneMenu->addMenuItem(name, loc->getObjectID());
 		} else if ((cbot->getFacilityType() == CloningBuildingObjectTemplate::LIGHT_JEDI_ONLY && player->hasSkill("force_rank_light_novice")) ||
 				(cbot->getFacilityType() == CloningBuildingObjectTemplate::DARK_JEDI_ONLY && player->hasSkill("force_rank_dark_novice"))) {
-			String name = "Jedi Enclave (" + String::valueOf((int)loc->getWorldPositionX()) + ", " + String::valueOf((int)loc->getWorldPositionY()) + ")";
-			cloneMenu->addMenuItem(name, loc->getObjectID());
+			FrsManager* frsManager = server->getFrsManager();
+
+			if (frsManager->isFrsEnabled()) {
+				String name = "Jedi Enclave (" + String::valueOf((int)loc->getWorldPositionX()) + ", " + String::valueOf((int)loc->getWorldPositionY()) + ")";
+				cloneMenu->addMenuItem(name, loc->getObjectID());
+			}
 		}
 	}
 
@@ -1546,7 +1568,7 @@ void PlayerManagerImplementation::setExperienceMultiplier(float globalMultiplier
  *
  */
 int PlayerManagerImplementation::awardExperience(CreatureObject* player, const String& xpType,
-		int amount, bool sendSystemMessage, float localMultiplier) {
+		int amount, bool sendSystemMessage, float localMultiplier, bool applyModifiers) {
 
 	PlayerObject* playerObject = player->getPlayerObject();
 
@@ -1558,7 +1580,12 @@ int PlayerManagerImplementation::awardExperience(CreatureObject* player, const S
 	if (amount > 0)
 		speciesModifier = getSpeciesXpModifier(player->getSpeciesName(), xpType);
 
-	int xp = playerObject->addExperience(xpType, (int) (amount * speciesModifier * localMultiplier * globalExpMultiplier));
+	int xp = 0;
+
+	if (applyModifiers)
+		xp = playerObject->addExperience(xpType, (int) (amount * speciesModifier * localMultiplier * globalExpMultiplier));
+	else
+		xp = playerObject->addExperience(xpType, (int)amount);
 
 	player->notifyObservers(ObserverEventType::XPAWARDED, player, xp);
 
@@ -2759,6 +2786,9 @@ void PlayerManagerImplementation::updatePermissionLevel(CreatureObject* targetPl
 
 void PlayerManagerImplementation::updatePermissionName(CreatureObject* player, int permissionLevel) {
 	ManagedReference<PlayerObject*> ghost = player->getPlayerObject();
+	int priviledgeFlag = permissionLevelList->getPriviledgeFlag(permissionLevel);
+
+	ghost->setPriviledgeFlag(priviledgeFlag);
 	//Send deltas
 	if (player->isOnline()) {
 		UnicodeString tag = permissionLevelList->getPermissionTag(permissionLevel);
@@ -2783,21 +2813,21 @@ void PlayerManagerImplementation::updateSwimmingState(CreatureObject* player, fl
 		return;
 	}
 
-	ManagedReference<Zone*> zone = player->getZone();
+	Zone* zone = player->getZone();
 
 	if (zone == NULL) {
 		player->info("No zone.", true);
 		return;
 	}
 
-	ManagedReference<PlanetManager*> planetManager = zone->getPlanetManager();
+	PlanetManager* planetManager = zone->getPlanetManager();
 
 	if (planetManager == NULL) {
 		player->info("No planet manager.", true);
 		return;
 	}
 
-	ManagedReference<TerrainManager*> terrainManager = planetManager->getTerrainManager();
+	TerrainManager* terrainManager = planetManager->getTerrainManager();
 
 	if (terrainManager == NULL) {
 		player->info("No terrain manager.", true);
@@ -4527,7 +4557,9 @@ void PlayerManagerImplementation::generateVeteranReward(CreatureObject* player )
 	player->sendSystemMessage( "@veteran:reward_given");  // Your reward has been placed in your inventory.
 
 	// Record reward in all characters registered to the account
-	playerGhost->addChosenVeteranReward(rewardSession->getMilestone(), reward.getTemplateFile());
+	GalaxyAccountInfo* accountInfo = account->getGalaxyAccountInfo(player->getZoneServer()->getGalaxyName());
+
+	accountInfo->addChosenVeteranReward(rewardSession->getMilestone(), reward.getTemplateFile());
 
 
 	cancelVeteranRewardSession( player );
@@ -4641,7 +4673,7 @@ bool PlayerManagerImplementation::increaseOnlineCharCountIfPossible(ZoneClientSe
 		}
 	}
 
-	if (onlineCount >= MAX_CHAR_ONLINE_COUNT)
+	if (onlineCount >= onlineCharactersPerAccount)
 		return false;
 
 	clients.add(client);
@@ -4692,8 +4724,6 @@ void PlayerManagerImplementation::disconnectAllPlayers() {
 			}
 		}
 	}
-
-	info("All players disconnected", true);
 }
 
 bool PlayerManagerImplementation::shouldRescheduleCorpseDestruction(CreatureObject* player, CreatureObject* ai) {

@@ -55,6 +55,10 @@ function VillageJediManager:onPlayerLoggedIn(pPlayer)
 
 	Glowing:onPlayerLoggedIn(pPlayer)
 
+	if (VillageJediManagerCommon.isVillageEligible(pPlayer) and not CreatureObject(pPlayer):hasSkill("force_title_jedi_novice")) then
+		awardSkill(pPlayer, "force_title_jedi_novice")
+	end
+
 	if (FsIntro:isOnIntro(pPlayer)) then
 		FsIntro:onLoggedIn(pPlayer)
 	end
@@ -74,22 +78,6 @@ function VillageJediManager:onPlayerLoggedIn(pPlayer)
 	end
 
 	JediTrials:onPlayerLoggedIn(pPlayer)
-
-	local pGhost = CreatureObject(pPlayer):getPlayerObject()
-
-	-- Covers players who had unlocked jedi knight prior to enclave implementation/frs data storage
-	if (pGhost ~= nil) then
-		local playerCouncil = PlayerObject(pGhost):getFrsCouncil()
-		local playerRank = PlayerObject(pGhost):getFrsRank()
-
-		if (playerCouncil == 0 and CreatureObject(pPlayer):hasSkill("force_title_jedi_rank_03")) then
-			local councilType = JediTrials:getJediCouncil(pPlayer)
-
-			if (councilType ~= nil and councilType ~= 0) then
-				PlayerObject(pGhost):setFrsCouncil(councilType)
-			end
-		end
-	end
 end
 
 function VillageJediManager:onPlayerLoggedOut(pPlayer)

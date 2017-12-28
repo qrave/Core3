@@ -372,7 +372,7 @@ void SceneObjectImplementation::notifyLoadFromDatabase() {
 		Core::getTaskManager()->executeTask([sceno, thisZone] () {
 			Locker locker(sceno);
 			thisZone->transferObject(sceno, -1, true);
-		}, "TransferToZoneLambda");
+		}, "TransferToZoneLambda", thisZone->getZoneName().toCharArray());
 	}
 }
 
@@ -596,7 +596,8 @@ void SceneObjectImplementation::broadcastDestroyPrivate(SceneObject* object, Sce
 	for (int i = 0; i < maxInRangeObjectCount; ++i) {
 		SceneObject* scno = static_cast<SceneObject*>(closeSceneObjects.get(i));
 
-		object->sendDestroyTo(scno);
+		if (selfObject != object)
+			object->sendDestroyTo(scno);
 	}
 }
 
@@ -828,6 +829,7 @@ void SceneObjectImplementation::updateVehiclePosition(bool sendPackets) {
 	parent->incrementMovementCounter();
 
 	parent->updateZone(false, sendPackets);
+	parent->asCreatureObject()->updateCOV();
 }
 
 void SceneObjectImplementation::updateZone(bool lightUpdate, bool sendPackets) {
@@ -1408,7 +1410,15 @@ void SceneObjectImplementation::faceObject(SceneObject* obj, bool notifyClient) 
 void SceneObjectImplementation::getContainerObjects(VectorMap<uint64, ManagedReference<SceneObject*> >& objects) {
 	ReadLocker locker(&containerLock);
 
-	objects = *containerObjects.getContainerObjects();
+	if (containerObjects.isLoaded(false)) {
+		objects = *containerObjects.getContainerObjects();
+	} else {
+		locker.release();
+
+		Locker writeLocker(&containerLock);
+
+		objects = *containerObjects.getContainerObjects();
+	}
 }
 
 void SceneObjectImplementation::getSlottedObjects(VectorMap<String, ManagedReference<SceneObject*> >& objects) {

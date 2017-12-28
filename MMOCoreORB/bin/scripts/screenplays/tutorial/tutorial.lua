@@ -41,6 +41,9 @@ function TutorialScreenPlay:start(pPlayer)
 		return
 	end
 
+	createObserver(EXITEDBUILDING, "TutorialScreenPlay", "onExitTutorial", pBuilding)
+	writeData(SceneObject(pBuilding):getObjectID() .. ":ownerID", playerID)
+
 	self:initializeHudElements(pPlayer)
 
 	self:spawnObjects(pPlayer)
@@ -57,6 +60,54 @@ function TutorialScreenPlay:start(pPlayer)
 
 	writeData(playerID .. ":tutorialStarted", 1)
 	createEvent(2000, "TutorialScreenPlay", "handleRoomOne", pPlayer, "")
+end
+
+function TutorialScreenPlay:onExitTutorial(pBuilding, pPlayer)
+	if pBuilding == nil or not SceneObject(pPlayer):isPlayerCreature() then
+		return 0
+	end
+
+	local ownerID = readData(SceneObject(pBuilding):getObjectID() .. ":ownerID")
+
+	if (SceneObject(pPlayer):getObjectID() ~= ownerID) then
+		return 0
+	end
+
+	createEvent(10000, "TutorialScreenPlay", "clearPlayers", pBuilding, "")
+	createEvent(20000, "TutorialScreenPlay", "destroyTutorial", pBuilding, "")
+
+	return 1
+end
+
+-- In case any admins had teleported in, as any players in the building when it is destroyed will get a client crash
+function TutorialScreenPlay:clearPlayers(pBuilding)
+	if (pBuilding == nil) then
+		return
+	end
+
+	local ownerID = readData(SceneObject(pBuilding):getObjectID() .. ":ownerID")
+
+	for i = 1, BuildingObject(pBuilding):getTotalCellNumber(), 1 do
+		local pCell = BuildingObject(pBuilding):getCell(i)
+
+		if (pCell ~= nil) then
+			for j = SceneObject(pCell):getContainerObjectsSize(), 1, -1 do
+				local pObject = SceneObject(pCell):getContainerObject(j - 1)
+				if pObject ~= nil and SceneObject(pObject):isPlayerCreature() and SceneObject(pObject):getObjectID() ~= ownerID then
+					SceneObject(pObject):switchZone("tatooine", 3387, 0, -4333, 0)
+				end
+			end
+		end
+	end
+end
+
+function TutorialScreenPlay:destroyTutorial(pBuilding)
+	if (pBuilding == nil) then
+		return
+	end
+
+	deleteData(SceneObject(pBuilding):getObjectID() .. ":ownerID")
+	SceneObject(pBuilding):destroyObjectFromWorld()
 end
 
 -- Spawn all tutorial mobiles and sceneobjects
@@ -456,12 +507,16 @@ function TutorialScreenPlay:spawnObjects(pPlayer)
 
 		if (pMobile ~= nil) then
 			writeData(SceneObject(pMobile):getObjectID() .. ":currentLoc", 1)
-			createEvent(45000, "TutorialScreenPlay", "doRoomElevenTrooperPathing", pMobile, "")
-			createObserver(DESTINATIONREACHED, "TutorialScreenPlay", "trooperDestReached", pMobile)
-			AiAgent(pMobile):setAiTemplate("manualescortwalk") -- Don't move unless patrol point is added to list, walking speed
-			AiAgent(pMobile):setFollowState(4) -- Patrolling
+			createEvent(1000, "TutorialScreenPlay", "setupTrooperPathing", pMobile, "")
 		end
 	end
+end
+
+function TutorialScreenPlay:setupTrooperPathing(pMobile)
+	createEvent(45000, "TutorialScreenPlay", "doRoomElevenTrooperPathing", pMobile, "")
+	createObserver(DESTINATIONREACHED, "TutorialScreenPlay", "trooperDestReached", pMobile)
+	AiAgent(pMobile):setAiTemplate("manualescortwalk") -- Don't move unless patrol point is added to list, walking speed
+	AiAgent(pMobile):setFollowState(4) -- Patrolling
 end
 
 -- Triggered any time a player changes between cells, sets previous room complete as they move to a new one

@@ -40,15 +40,15 @@
 # this exception also makes it possible to release a modified version
 # which carries forward this exception.
 
-DEFAULT_FLAGS = $(UNITTEST_DIRECTIVES) -ggdb -Wall -Wextra -Wno-unused -Wno-sign-compare -Wno-multichar -DDEFAULT_DYNAMIC_CAST -Wno-unused-parameter -Wno-overloaded-virtual -Wno-missing-declarations -Werror -std=c++11 -march=native
+DEFAULT_FLAGS = $(UNITTEST_DIRECTIVES) -ggdb -Wall -Wextra -Wno-unused -Wno-sign-compare -Wno-multichar -DDEFAULT_DYNAMIC_CAST -Wno-unused-parameter -Wno-overloaded-virtual -Wno-missing-declarations -Werror -std=c++11 -march=native -DCOMPILE_CORE3_TESTS
 AM_CXXFLAGS = $(DEFAULT_FLAGS) -O0
 
 ENGINE3_PATH=../../../../MMOEngine
 ENGINE3_MOCK_PATH=../../../utils
 
-GTEST_PATH=../../../utils/gtest-1.6.0
+GTEST_PATH=../../../utils/googletest-release-1.8.0/googletest
 
-GMOCK_PATH=../../../utils/gmock-1.6.0
+GMOCK_PATH=../../../utils/googletest-release-1.8.0/googlemock
 
 AUTOGEN_PATH=../../../src/autogen
 
@@ -71,8 +71,8 @@ LIBS =	$(SYSTEM_LIBS)  \
 	-L$(USER_LIBS_PATH)/ -L$(USER_LIBS_PATH)/mysql -L$(USER_LIBS_PATH)/mysql5/mysql \
 	-L$(ENGINE3_PATH)/lib/unix \
 	-L/usr/local/lib \
-	-L$(GTEST_PATH)/lib \
-	-lmysqlclient -lz -lengine3 -llua -ldb-5.3 -lssl -lcrypto -lgtest
+	-L$(GMOCK_PATH)/lib \
+	-lz -lengine3 -lmysqlclient -llua -ldb-5.3 -lssl -lcrypto -lgtest	
 
 #AM_LDFLAGS = -pagezero_size 10000 -image_base 100000000
 #AM_LDFLAGS = --enable-stdcall-fixup
@@ -93,20 +93,24 @@ core3client_LDADD = libcore3templates.a libcore3terrain.a libcore3pathfinding.a
 #server/zone/objects/scene/SceneObject.h.gch:
 #	$(CXX) $(INCLUDES) -I../../../src ../../../src/server/zone/objects/scene/SceneObject.h
 
-core3_TESTS = 	server/zone/objects/area/areashapes/tests/CircularAreaShapeTest.cpp \
-			  	server/zone/managers/director/tests/BasicScreenPlayTest.cpp \
-			  	server/zone/managers/creature/tests/LuaMobileTest.cpp \
-			  	server/zone/managers/jedi/tests/JediManagerTest.cpp \
-			  	terrain/manager/tests/TerrainManagerTest.cpp \
-			  	server/zone/objects/creature/ai/bt/tests/BehaviorTest.cpp \
-			  	server/zone/objects/area/areashapes/tests/RectangularAreaShapeTest.cpp \
-			  	server/zone/objects/area/areashapes/tests/RingAreaShapeTest.cpp \
-			  	server/zone/tests/DeadlockTestBase.cpp \
-			  	terrain/tests/BasicTerrainTest.cpp \
-			  	server/zone/tests/ZoneTest.cpp \
-			  	server/zone/managers/objectcontroller/command/tests/CommandLuaTest.cpp
+core3_TESTS = 	tests/CircularAreaShapeTest.cpp \
+			  	tests/BasicScreenPlayTest.cpp \
+			  	tests/LuaMobileTest.cpp \
+			  	tests/JediManagerTest.cpp \
+			  	tests/TerrainManagerTest.cpp \
+			  	tests/BehaviorTest.cpp \
+			  	tests/RectangularAreaShapeTest.cpp \
+			  	tests/RingAreaShapeTest.cpp \
+			  	tests/DeadlockTestBase.cpp \
+			  	tests/BasicTerrainTest.cpp \
+			  	tests/ZoneTest.cpp \
+			  	tests/CommandLuaTest.cpp
 
-core3_IDLS =	autogen/server/zone/managers/frs/FrsManager.cpp \
+core3_IDLS =	autogen/server/zone/objects/building/TutorialBuildingObject.cpp \
+				autogen/server/zone/objects/creature/credits/CreditObject.cpp \
+				autogen/server/zone/objects/mission/PlayerBounty.cpp \
+				autogen/server/chat/PendingMessageList.cpp \
+				autogen/server/zone/managers/frs/FrsManager.cpp \
 				autogen/server/zone/objects/tangible/misc/ContractCrate.cpp \
 				autogen/server/zone/objects/tangible/misc/FsBuffItem.cpp \
 				autogen/server/zone/objects/tangible/misc/FsCsObject.cpp \
@@ -273,7 +277,6 @@ core3_IDLS =	autogen/server/zone/managers/frs/FrsManager.cpp \
 				autogen/server/zone/objects/building/hospital/HospitalBuildingObject.cpp \
 				autogen/server/zone/objects/building/recreation/RecreationBuildingObject.cpp \
 				autogen/server/zone/objects/building/travel/TravelBuildingObject.cpp \
-				autogen/server/zone/objects/building/tutorial/TutorialBuildingObject.cpp \
 				autogen/server/zone/managers/guild/GuildManager.cpp \
 				autogen/server/chat/room/ChatRoom.cpp \
 				autogen/server/chat/ChatManager.cpp \
@@ -374,6 +377,11 @@ core3_IDLS =	autogen/server/zone/managers/frs/FrsManager.cpp \
 
 core3_SOURCES =	$(core3_IDLS) \
 		$(core3_TESTS) \
+		server/zone/QuadTree.cpp \
+		server/zone/QuadTreeEntryImplementation.cpp \
+		server/zone/CloseObjectsVector.cpp \
+		server/zone/managers/credit/CreditManager.cpp \
+		server/zone/objects/creature/credits/CreditObjectImplementation.cpp \
 		server/zone/objects/creature/variables/LuaSkill.cpp \
 		server/zone/objects/player/sui/listbox/LuaSuiListBox.cpp \
 		server/zone/objects/player/sui/LuaSuiPageData.cpp \
@@ -781,7 +789,6 @@ core3_SOURCES =	$(core3_IDLS) \
 		server/zone/objects/installation/InstallationObjectImplementation.cpp \
 		server/zone/objects/building/BuildingObjectImplementation.cpp \
 		server/zone/objects/building/LuaBuildingObject.cpp \
-		server/zone/objects/building/tutorial/TutorialBuildingObjectImplementation.cpp \
 		server/zone/objects/structure/StructurePermissionList.cpp \
 		server/zone/objects/player/ValidatedPosition.cpp \
 		server/zone/objects/player/sessions/CitySpecializationSessionImplementation.cpp \
@@ -820,6 +827,9 @@ core3_SOURCES =	$(core3_IDLS) \
 		server/chat/WaypointChatParameter.cpp \
 		server/zone/managers/objectcontroller/ObjectControllerImplementation.cpp \
 		server/zone/managers/objectcontroller/command/CommandConfigManager.cpp \
+		server/zone/managers/objectcontroller/command/CommandConfigManager2.cpp \
+		server/zone/managers/objectcontroller/command/CommandConfigManager3.cpp \
+		server/zone/managers/objectcontroller/command/CommandConfigManager4.cpp \
 		server/zone/managers/mission/MissionManagerImplementation.cpp \
 		server/zone/managers/mission/spawnmaps/MissionNpcSpawnMap.cpp \
 		server/zone/managers/mission/spawnmaps/NpcSpawnPoint.cpp \

@@ -8,7 +8,7 @@ FsOutro = ScreenPlay:new {
 	FORCESHRINE = 4,
 
 	stepDelay = {
-		[1] = { 300, 600 }, -- Old man visit, 5-10 mins for testing
+		[1] = { 15600, 86400 }, -- Old man visit, 1 hour to 1 day
 	}
 }
 
@@ -50,11 +50,11 @@ function FsOutro:onLoggedIn(pPlayer)
 
 	if (curStep == self.OLDMANWAIT) then
 		if (self:hasDelayPassed(pPlayer)) then
-			createEvent(getRandomNumber(300, 900) * 1000, "FsOutro", "startOldMan", pPlayer, "")
+			createEvent(getRandomNumber(300, 900) * 1000, "FsOutro", "doOldManSpawn", pPlayer, "")
 		end
 	elseif (curStep == self.OLDMANMEET) then
 		QuestManager.resetQuest(pPlayer, QuestManager.quests.OLD_MAN_FINAL)
-		createEvent(getRandomNumber(300, 900) * 1000, "FsOutro", "startOldMan", pPlayer, "")
+		createEvent(getRandomNumber(300, 900) * 1000, "FsOutro", "doOldManSpawn", pPlayer, "")
 		self:setCurrentStep(pPlayer, self.OLDMANWAIT)
 	elseif (curStep == self.MELLICHAETHEATER) then
 		if (MellichaeOutroTheater:hasTaskStarted(pPlayer)) then
@@ -127,4 +127,23 @@ function FsOutro:doOldManSpawn(pPlayer)
 		createEvent(getRandomNumber(300, 900) * 1000, "FsOutro", "doOldManSpawn", pPlayer, "")
 		return
 	end
+end
+
+function FsOutro:completeVillageOutroFrog(pPlayer)
+	if (pPlayer == nil) then
+		return
+	end
+
+	local pGhost = CreatureObject(pPlayer):getPlayerObject()
+
+	if (pGhost == nil) then
+		return
+	end
+
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.OLD_MAN_FINAL)
+	QuestManager.completeQuest(pPlayer, QuestManager.quests.FS_THEATER_FINAL)
+
+	VillageJediManagerCommon.setJediProgressionScreenPlayState(pPlayer, VILLAGE_JEDI_PROGRESSION_DEFEATED_MELLIACHAE)
+
+	PadawanTrials:doPadawanTrialsSetup(pPlayer)
 end

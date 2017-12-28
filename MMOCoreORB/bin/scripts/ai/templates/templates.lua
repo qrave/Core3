@@ -1,4 +1,5 @@
 includeAiFile("templates/example.lua")
+includeAiFile("templates/cantinacrackdown.lua")
 includeAiFile("templates/stationary.lua")
 includeAiFile("templates/stationarynoleash.lua")
 includeAiFile("templates/follow.lua")
@@ -15,6 +16,7 @@ includeAiFile("templates/selectattackpet.lua")
 includeAiFile("templates/combatmovepet.lua")
 includeAiFile("templates/villageraider.lua")
 includeAiFile("templates/enclavesentinel.lua")
+includeAiFile("templates/deathwatchdefender.lua")
 
 getTarget = {
 	{CREATURE_PET, "gettargetpetc"},
@@ -119,3 +121,11 @@ addAiBehavior("WaitEnclaveSentinel")
 addAiBehavior("SelectAttackEnclaveSentinel")
 addAiBehavior("SelectWeaponEnclaveSentinel")
 addAiBehavior("GetTargetEnclaveSentinel")
+
+addAiBehavior("CompositeDeathWatchDefender")
+addAiBehavior("MoveDeathWatchDefender")
+addAiBehavior("CombatMoveDeathWatchDefender")
+addAiBehavior("WaitDeathWatchDefender")
+addAiBehavior("SelectAttackDeathWatchDefender")
+addAiBehavior("SelectWeaponDeathWatchDefender")
+addAiBehavior("GetTargetDeathWatchDefender")

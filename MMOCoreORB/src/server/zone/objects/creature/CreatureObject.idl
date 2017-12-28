@@ -34,12 +34,19 @@ include server.zone.objects.creature.variables.WearablesDeltaVector;
 import system.lang.Long;
 import engine.service.proto.BasePacket;
 import system.thread.Mutex;
+import server.zone.objects.creature.credits.CreditObject;
+include engine.util.u3d.Vector3;
+include system.util.SortedVector;
+include engine.log.Logger;
 
 @mock
 class CreatureObject extends TangibleObject {
 	@weakReference
 	protected transient ZoneClientSession owner;
 
+    protected CreditObject creditObject;
+
+    // deprectated
 	protected int bankCredits;
 	protected int cashCredits;
 
@@ -190,6 +197,8 @@ class CreatureObject extends TangibleObject {
 
 	public static final int MALE = 0;
 	public static final int FEMALE = 1;
+	
+	public static final int CREOCOVTYPE = 2;
 
 	public static transient float DEFAULTRUNSPEED;
 
@@ -673,7 +682,7 @@ class CreatureObject extends TangibleObject {
 	 * @param updateclient Should packets be sent to the player?
 	 */
 	@preLocked
-	public native void clearBuffs(boolean updateclient);
+	public native void clearBuffs(boolean updateclient, boolean removeAll);
 	
 	/**
 	 * Renews the buff and all secondary buffs associated with it.
@@ -782,15 +791,18 @@ class CreatureObject extends TangibleObject {
 
 	@preLocked
 	public void addBankCredits(int credits, boolean notifyClient = true) {
-		int newCredits = bankCredits + credits;
+		int newCredits = getBankCredits() + credits;
 		setBankCredits(newCredits);
 	}
 
 	@preLocked
 	public void addCashCredits(int credits, boolean notifyClient = true) {
-		int newCredits = cashCredits + credits;
+		int newCredits = getCashCredits() + credits;
 		setCashCredits(newCredits);
 	}
+
+	@preLocked
+	public native CreditObject getCreditObject();
 
 	@preLocked
 	public native void subtractBankCredits(int credits);
@@ -803,7 +815,7 @@ class CreatureObject extends TangibleObject {
 		if (credits < 0)
 			return false;
 
-		if (cashCredits < credits)
+		if (getCashCredits() < credits)
 			return false;
 
 		return true;
@@ -814,7 +826,7 @@ class CreatureObject extends TangibleObject {
 		if (credits < 0)
 			return false;
 
-		if (bankCredits < credits)
+		if (getBankCredits() < credits)
 			return false;
 
 		return true;
@@ -1109,6 +1121,7 @@ class CreatureObject extends TangibleObject {
 	 * @param msg BasePacket to send
 	 */
 	@dirty
+	@local
 	public native void sendMessage(BasePacket msg);
 
 	/**
@@ -1183,7 +1196,7 @@ class CreatureObject extends TangibleObject {
 	 */
 	@preLocked
 	public void destroyObjectFromDatabase(boolean destroyContainedObjects = false) {
-		clearBuffs(false);
+		clearBuffs(false, true);
 
 		super.destroyObjectFromDatabase(destroyContainedObjects);
 	}
@@ -1468,12 +1481,12 @@ class CreatureObject extends TangibleObject {
 
 	@read
 	public int getBankCredits() {
-		return bankCredits;
+		return creditObject.getBankCredits();
 	}
 
 	@read
 	public int getCashCredits() {
-		return cashCredits;
+		return creditObject.getCashCredits();
 	}
 
 	@dirty
@@ -2080,7 +2093,7 @@ class CreatureObject extends TangibleObject {
 	
 	@dirty
 	public int registerToCloseObjectsReceivers() {
-	    return isPlayerCreature();
+	    return ((int) isPlayerCreature() | CREOCOVTYPE);
 	}
 
 	@dirty
@@ -2148,4 +2161,6 @@ class CreatureObject extends TangibleObject {
 	@preLocked
 	public abstract void reloadTemplate() {
 	}
+
+	public native void updateCOV();
 }

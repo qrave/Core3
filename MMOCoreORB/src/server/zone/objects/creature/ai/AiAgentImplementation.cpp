@@ -6,7 +6,7 @@
  */
 
 #include <engine/core/ManagedReference.h>
-#include <engine/util/u3d/CloseObjectsVector.h>
+#include <server/zone/CloseObjectsVector.h>
 #include <engine/util/u3d/Vector3.h>
 #include <system/lang/IllegalArgumentException.h>
 #include <system/lang/ref/Reference.h>
@@ -776,7 +776,7 @@ void AiAgentImplementation::doAwarenessCheck() {
 		return;
 
 	SortedVector<QuadTreeEntry*> closeObjects;
-	vec->safeCopyTo(closeObjects);
+	vec->safeCopyReceiversTo(closeObjects, CreatureObject::CREOCOVTYPE);
 
 	Behavior* current = behaviors.get(currentBehaviorID);
 
@@ -1240,6 +1240,8 @@ void AiAgentImplementation::leash() {
 
 	clearPatrolPoints();
 
+	clearDots();
+
 	CombatManager::instance()->forcePeace(asAiAgent());
 
 	if (!homeLocation.isInRange(asAiAgent(), 1.5)) {
@@ -1659,6 +1661,8 @@ void AiAgentImplementation::updateCurrentPosition(PatrolPoint* pos) {
 		updateZoneWithParent(cell, false, false);
 	else
 		updateZone(false, false);
+
+	updateCOV();
 }
 
 
@@ -1936,40 +1940,46 @@ bool AiAgentImplementation::findNextPosition(float maxDistance, bool walk) {
 
 	if (found) {
 		// Set the next place we will be if we are to move
-		nextStepPosition.setPosition(nextPosition.getX(), nextPosition.getZ(), nextPosition.getY());
-		nextStepPosition.setCell(nextPosition.getCell());
+		Vector3 nextWorldPos = nextPosition.getWorldPosition();
+		float dist = thisWorldPos.distanceTo(nextWorldPos);
 
-		nextStepPosition.setReached(false);
+		if (!(dist > 0 && newSpeed > 0.1)) {
+			found = false;
+		} else {
+			nextStepPosition.setPosition(nextPosition.getX(), nextPosition.getZ(), nextPosition.getY());
+			nextStepPosition.setCell(nextPosition.getCell());
 
-		Vector3 nextWorldPos = nextStepPosition.getWorldPosition();
+			nextStepPosition.setReached(false);
 
-		float directionangle = atan2(nextWorldPos.getX() - thisWorldPos.getX(), nextWorldPos.getY() - thisWorldPos.getY());
+			float directionangle = atan2(nextWorldPos.getX() - thisWorldPos.getX(), nextWorldPos.getY() - thisWorldPos.getY());
 
-		if (directionangle < 0) {
-			float a = M_PI + directionangle;
-			directionangle = M_PI + a;
-		}
+			if (directionangle < 0) {
+				float a = M_PI + directionangle;
+				directionangle = M_PI + a;
+			}
 
-		float err = fabs(directionangle - direction.getRadians());
+			float err = fabs(directionangle - direction.getRadians());
 
-		if (err >= 0.05)
-			direction.setHeadingDirection(directionangle);
+			if (err >= 0.05)
+				direction.setHeadingDirection(directionangle);
 
-		float dist = fabs(thisWorldPos.distanceTo(nextWorldPos));
-		if (dist > 0 && newSpeed > 0.1) {
+			float dist = fabs(thisWorldPos.distanceTo(nextWorldPos));
 			auto interval = UPDATEMOVEMENTINTERVAL;
 			nextMovementInterval = Math::min((int)((Math::min(dist, maxDist)/newSpeed)*1000 + 0.5), interval);
 			currentSpeed = newSpeed;
-		} else
-			currentSpeed = 0;
 
-		// Tell the clients where to expect us next tick -- requires that we have found a destination
-		broadcastNextPositionUpdate(&nextStepPosition);
-	} else {
-		PatrolPoint oldPoint = patrolPoints.remove(0);
+			// Tell the clients where to expect us next tick -- requires that we have found a destination
+			broadcastNextPositionUpdate(&nextStepPosition);
+		}
+	}
 
-		if (getFollowState() == AiAgent::PATROLLING)
-			savedPatrolPoints.add(oldPoint);
+	if (!found) {
+		if (patrolPoints.size()) {
+			PatrolPoint oldPoint = patrolPoints.remove(0);
+
+			if (getFollowState() == AiAgent::PATROLLING)
+				savedPatrolPoints.add(oldPoint);
+		}
 
 		ManagedReference<SceneObject*> followCopy = followObject.get();
 		if (followCopy == NULL)
@@ -2239,8 +2249,12 @@ int AiAgentImplementation::setDestination() {
 }
 
 bool AiAgentImplementation::completeMove() {
-	updateCurrentPosition(&nextStepPosition);
-	nextStepPosition.setReached(true);
+	if (!nextStepPosition.isReached()) {
+		updateCurrentPosition(&nextStepPosition);
+
+		nextStepPosition.setReached(true);
+	}
+
 	return true;
 }
 
@@ -2367,6 +2381,8 @@ void AiAgentImplementation::activateMovementEvent() {
 	if (getZoneUnsafe() == NULL)
 		return;
 
+	const static uint64 minScheduleTime = 100;
+
 	Locker locker(&movementEventMutex);
 
 	if (isWaiting() && moveEvent != NULL)
@@ -2384,12 +2400,12 @@ void AiAgentImplementation::activateMovementEvent() {
 	if (moveEvent == NULL) {
 		moveEvent = new AiMoveEvent(asAiAgent());
 
-		moveEvent->schedule(waitTime > 0 ? waitTime : nextMovementInterval);
+		moveEvent->schedule(Math::max(minScheduleTime, (uint64) (waitTime > 0 ? waitTime : nextMovementInterval)));
 	}
 
 	try {
 		if (!moveEvent->isScheduled())
-			moveEvent->schedule(waitTime > 0 ? waitTime : nextMovementInterval);
+			moveEvent->schedule(Math::max(minScheduleTime, (uint64) (waitTime > 0 ? waitTime : nextMovementInterval)));
 	} catch (IllegalArgumentException& e) {
 
 	}
@@ -2790,7 +2806,7 @@ bool AiAgentImplementation::isAggressiveTo(CreatureObject* target) {
 		// for players, we are only an enemy if the standing is less than -3000, but we are
 		// forced to non-aggressive status if the standing is over 3000, otherwise use the
 		// pvpStatusBitmask to determine aggressiveness
-		if (target->isPlayerCreature() && ghost != NULL) {
+		if (target->isPlayerCreature() && ghost != NULL && !(getOptionsBitmask() & CreatureFlag::IGNORE_FACTION_STANDING)) {
 			float targetsStanding = ghost->getFactionStanding(factionString);
 
 			if (targetsStanding <= -3000)
@@ -3079,7 +3095,7 @@ void AiAgentImplementation::broadcastInterrupt(int64 msg) {
 				zone->getInRangeObjects(aiAgent->getPositionX(), aiAgent->getPositionY(), ZoneServer::CLOSEOBJECTRANGE, &closeAiAgents, true);
 			} else {
 				closeAiAgents.removeAll(closeobjects->size(), 10);
-				closeobjects->safeCopyTo(closeAiAgents);
+				closeobjects->safeCopyReceiversTo(closeAiAgents, CreatureObject::CREOCOVTYPE); //only creos, type 2
 			}
 		} catch (Exception& e) {
 
@@ -3372,7 +3388,7 @@ AiAgent* AiAgent::asAiAgent() {
 }
 
 void AiAgentImplementation::reloadTemplate() {
-	clearBuffs(false);
+	clearBuffs(false, false);
 	loadTemplateData(npcTemplate);
 
 	if (isMount()) {

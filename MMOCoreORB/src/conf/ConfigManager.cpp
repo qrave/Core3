@@ -11,6 +11,8 @@ ConfigManager::ConfigManager() {
 	makeStatus = true;
 	makeWeb = true;
 	dumpObjFiles = true;
+	unloadContainers = true;
+	useMetrics = true;
 
 	orbNamingDirectoryAddress = "";
 	orbNamingDirectoryPort = 44419;
@@ -39,6 +41,9 @@ ConfigManager::ConfigManager() {
 	webAccessLog = "log/web_access.log";
 	webSessionTimeout = 600;
 
+	metricsHost = "127.0.0.1";
+	metricsPort = 8125;
+
 	loginProcessingThreads = 1;
 	loginRequiredVersion = "20050408-18:00";
 	loginPort = 44453;
@@ -49,6 +54,7 @@ ConfigManager::ConfigManager() {
 	zoneAllowedConnections = 300;
 	zoneGalaxyID = 2;
 	zoneOnlineCharactersPerAccount = 1;
+	zonePort = 0;
 
 	statusAllowedConnections = 100;
 	statusInterval = 60;
@@ -59,6 +65,11 @@ ConfigManager::ConfigManager() {
 	purgeDeletedCharacters = 10; //Default is 10 minutes.
 
 	maxNavMeshJobs = 6;
+
+	termsOfService = "";
+	tosVersion = 0;
+
+	logFileLevel = Logger::INFO;
 }
 
 bool ConfigManager::loadConfigData() {
@@ -74,6 +85,9 @@ bool ConfigManager::loadConfigData() {
 	makeStatus = getGlobalByte("MakeStatus");
 	makeWeb = getGlobalByte("MakeWeb");
 	dumpObjFiles = getGlobalByte("DumpObjFiles");
+	unloadContainers = getGlobalByte("UnloadContainers");
+	useMetrics = getGlobalByte("UseMetrics");
+	pvpMode = getGlobalByte("PvpMode");
 
 	orbNamingDirectoryAddress = getGlobalString("ORB");
 	orbNamingDirectoryPort = getGlobalShort("ORBPort");
@@ -112,6 +126,7 @@ bool ConfigManager::loadConfigData() {
 	zoneAllowedConnections = getGlobalInt("ZoneAllowedConnections");
 	zoneGalaxyID = getGlobalInt("ZoneGalaxyID");
 	zoneOnlineCharactersPerAccount = getGlobalInt("ZoneOnlineCharactersPerAccount");
+	zonePort = getGlobalInt("ZoneServerPort");
 
 	statusAllowedConnections = getGlobalInt("StatusAllowedConnections");
 	statusInterval = getGlobalInt("StatusInterval");
@@ -121,11 +136,21 @@ bool ConfigManager::loadConfigData() {
 	webErrorLog = getGlobalString("WebErrorLog");
 	webSessionTimeout = getGlobalInt("WebSessionTimeout");
 
+	metricsHost = getGlobalString("MetricsHost");
+	metricsPrefix = getGlobalString("MetricsPrefix");
+	metricsPort = getGlobalInt("MetricsPort");
+
 	progressMonitors = getGlobalBoolean("ProgressMonitors");
 
 	purgeDeletedCharacters = getGlobalInt("PurgeDeletedCharacters");
 
 	maxNavMeshJobs = getGlobalInt("MaxNavMeshJobs");
+
+	logFile = getGlobalString("LogFile");
+	logFileLevel = getGlobalInt("LogFileLevel");
+
+	termsOfService = getGlobalString("TermsOfService");
+	tosVersion = getGlobalInt("TermsOfServiceVersion");
 
 	return true;
 }

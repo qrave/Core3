@@ -15,6 +15,7 @@ import system.util.VectorMap;
 import system.util.Vector;
 include server.zone.managers.frs.FrsRankingData;
 include system.lang.ref.Reference;
+include system.lang.Time;
 
 class FrsManager extends ManagedService implements Logger {
 	public static final short COUNCIL_LIGHT = 1;
@@ -144,7 +145,7 @@ class FrsManager extends ManagedService implements Logger {
 		if (roomRequirements.contains(cellID))
 			return roomRequirements.get(cellID);
 
-		return 1;
+		return 0;
 	}
 	
 	public native int getMaintenanceInterval() {

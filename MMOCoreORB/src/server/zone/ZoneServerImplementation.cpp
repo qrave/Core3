@@ -194,7 +194,7 @@ void ZoneServerImplementation::initialize() {
 void ZoneServerImplementation::startZones() {
 	info("Loading zones.");
 
-	SortedVector<String>* enabledZones = configManager->getEnabledZones();
+	auto enabledZones = configManager->getEnabledZones();
 
 	StructureManager* structureManager = StructureManager::instance();
 	structureManager->setZoneServer(_this.getReferenceUnsafeStaticCast());
@@ -474,15 +474,10 @@ void ZoneServerImplementation::processMessage(Message* message) {
 	Task* task = zonePacketHandler->generateMessageTask(client, message);
 
 	if (task != NULL) {
-		int queue = ((MessageCallback*)task)->getTaskQueue();
 		auto taskManager = Core::getTaskManager();
 
 		if (taskManager) {
-			if (queue >= 0) {
-				taskManager->executeTask(task, queue);
-			} else {
-				taskManager->executeTask(task);
-			}
+			taskManager->executeTask(task);
 		} else {
 			delete task;
 		}

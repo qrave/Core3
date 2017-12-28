@@ -5,6 +5,7 @@
 #ifndef DATATRANSFORMWITHPARENT_H_
 #define DATATRANSFORMWITHPARENT_H_
 
+#include "server/zone/objects/scene/WorldCoordinates.h"
 #include "ObjectControllerMessage.h"
 #include "server/zone/ZoneServer.h"
 #include "server/zone/objects/creature/CreatureObject.h"
@@ -50,8 +51,6 @@ class DataTransformWithParentCallback : public MessageCallback {
 	float parsedSpeed;
 
 	ObjectControllerMessageCallback* objectControllerMain;
-
-	//	taskqueue = 3;
 public:
 	DataTransformWithParentCallback(ObjectControllerMessageCallback* objectControllerCallback) :
 		MessageCallback(objectControllerCallback->getClient(), objectControllerCallback->getServer()) {
@@ -69,23 +68,15 @@ public:
 
 		objectControllerMain = objectControllerCallback;
 
-
-		taskqueue = 3;
-
 		ManagedReference<CreatureObject*> player = client->getPlayer();
 
 		if (player != NULL) {
-			Zone* zone = player->getLocalZone();
+			Zone* zone = player->getZone();
 
 			if (zone != NULL) {
 				String zoneName = zone->getZoneName();
 
-				if (zoneName == "corellia")
-					taskqueue = 4;
-				else if (zoneName == "tatooine")
-					taskqueue = 5;
-				else if (zoneName == "naboo")
-					taskqueue = 6;
+				setCustomTaskQueue(zoneName);
 			}
 		}
 	}
@@ -203,12 +194,9 @@ public:
 			return;
 		}*/
 
-		ManagedReference<SceneObject*> newParent = server->getZoneServer()->getObject(parent, true);
+		ManagedReference<CellObject*> newParent = server->getZoneServer()->getObject(parent, true).castTo<CellObject*>();
 
 		if (newParent == NULL)
-			return;
-
-		if (!newParent->isCellObject())
 			return;
 
 		ManagedReference<SceneObject*> parentSceneObject = newParent->getParent().get();
@@ -225,10 +213,6 @@ public:
 
 		if (par != NULL && par->isShipObject())
 			return;
-
-		/*StringBuffer posMsg;
-		posMsg << "posX: " << positionX << " posZ: " << positionZ << " posY:" << positionY;
-		object->info(posMsg.toString(), true);*/
 
 		ManagedReference<PlayerManager*> playerManager = server->getPlayerManager();
 
@@ -251,7 +235,29 @@ public:
 			}
 		}
 
-		Reference<Vector<float>* > collisionPoints = CollisionManager::getCellFloorCollision(positionX, positionY, cast<CellObject*>(newParent.get()));
+		if ( par != newParent) {
+			CellObject* currentCell = par.castTo<CellObject*>();
+			PortalLayout *layout = building->getObjectTemplate()->getPortalLayout();
+			if (layout == NULL)
+				return;
+
+			const CellProperty *cellProperty = layout->getCellProperty(newParent->getCellNumber());
+			if (!cellProperty->hasConnectedCell(currentCell != NULL ? currentCell->getCellNumber() : 0)) {
+				StringBuffer buf;
+				buf << object->getObjectID() << " Attempted to change parents to a cell not connected to the previous parent" << endl;
+				buf << "X: " << positionX << "Y: " << positionY << "Z: " << positionZ << " parentID: " << parent;
+//				for (int i : cellProperty->getConnectedCells()) {
+//					buf << "ConnectedCell: " << i << endl;
+//				}
+				object->error(buf.toString());
+				bounceBack(object, pos);
+				return;
+			}
+		}
+
+		CellObject* cell = newParent;
+
+		Reference<Vector<float>* > collisionPoints = CollisionManager::getCellFloorCollision(positionX, positionY, cell);
 
 		if (collisionPoints == NULL) {
 			bounceBack(object, pos);
@@ -286,6 +292,15 @@ public:
 
 				return;
 			}
+		}
+
+		WorldCoordinates coords(Vector3(positionX, positionY, positionZ), cell);
+		float distance = coords.getWorldPosition().squaredDistanceTo(object->getWorldPosition());
+		if (distance > 21 * 21) {
+			object->info("bouncing back with distance: " + String::valueOf(distance));
+			bounceBack(object, pos);
+
+			return;
 		}
 
 		if (playerManager->checkSpeedHackFirstTest(object, parsedSpeed, pos, 1.1f) != 0)

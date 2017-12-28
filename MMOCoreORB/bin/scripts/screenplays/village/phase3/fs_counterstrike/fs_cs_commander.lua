@@ -83,7 +83,12 @@ function FsCsCommander:captureCommander(pCommander, pPlayer)
 		writeData(playerID .. ":fsCounterStrike:commanderID", commanderID)
 		CreatureObject(pPlayer):sendSystemMessage("@fs_quest_village:fs_cs_capd_commander_via_group")
 	else
-		printLuaError("ERROR in FsCsCommander:notifyCommanderCaptured(), got to end of function without matching if conditions.")
+		local errorLog = "FsCsCommander:captureCommander(), got to end of if block."
+		errorLog = errorLog .. " Captured by: " .. capturedByID .. ", pPlayerID: " .. playerID .. ". "
+		errorLog = errorLog .. " 1: " .. tostring(QuestManager.hasActiveQuest(pPlayer, QuestManager.quests.FS_CS_INTRO)) .. ". "
+		errorLog = errorLog .. " 2: " .. tostring(QuestManager.hasActiveQuest(pPlayer, QuestManager.quests.FS_CS_LAST_CHANCE)) .. ". "
+		errorLog = errorLog .. " 3: " .. tostring(QuestManager.hasActiveQuest(pPlayer, QuestManager.quests.FS_CS_ENSURE_CAPTURE)) .. ". "
+		printLuaError(errorLog)
 	end
 end
 
@@ -184,14 +189,22 @@ function FsCsCommander:notifyEnteredCommanderTurninArea(pArea, pCreature)
 	end
 
 	local areaID = SceneObject(pArea):getObjectID()
-	local commanderID = SceneObject(pCreature):getObjectID()
+
+	local creatureID = SceneObject(pCreature):getObjectID()
+	local theaterID = readData(areaID .. ":theaterID")
+	local commanderID = readData(theaterID .. ":commanderID")
+
+	if (creatureID ~= commanderID) then
+		return 0
+	end
+
 	local escorterID = readData(commanderID .. ":escorterID")
-	local theaterID = readData(commanderID .. ":theaterID")
 	local teamTurnin = false
 
 	local pEscorter = getSceneObject(escorterID)
 
 	if (pEscorter == nil) then
+		printLuaError("FsCsCommander:notifyEnteredCommanderTurninArea unable to get escorter object, returned nil.")
 		return 1
 	end
 
@@ -200,6 +213,7 @@ function FsCsCommander:notifyEnteredCommanderTurninArea(pArea, pCreature)
 	local pShieldKiller = getSceneObject(shieldKillerID)
 
 	if (pShieldKiller == nil) then
+		printLuaError("FsCsCommander:notifyEnteredCommanderTurninArea unable to get shieldkiller object, returned nil.")
 		return 1
 	end
 
@@ -231,7 +245,7 @@ function FsCsCommander:notifyEnteredCommanderTurninArea(pArea, pCreature)
 	return 1
 end
 
-function FsCounterStrike:handleCommanderAbandoned(pPlayer)
+function FsCsCommander:handleCommanderAbandoned(pPlayer)
 	local playerID = SceneObject(pPlayer):getObjectID()
 	local commanderID = readData(playerID .. ":fsCounterStrike:commanderID")
 
@@ -547,7 +561,7 @@ function FsCsCommander:setupRescueMob(pMobile)
 end
 
 function FsCsCommander:doRescuerSpatial(pMobile)
-	if (pMobile == nil or getRandomNumber(100) < 75) then
+	if (pMobile == nil or CreatureObject(pMobile):isDead() or getRandomNumber(100) < 75) then
 		return
 	end
 
